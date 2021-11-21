@@ -89,4 +89,140 @@ const App = ({notes}) => {
 
 ```
 
-- Componets often reside in a directory named `components`
+- Components often reside in a directory named `components`
+
+## B: Forms
+
+- Ex of adding/using form in component
+
+```js
+const App = (props) => {
+  const [notes, setNotes] = useState(props.notes)
+
+  // event handler for form
+  const addNote = (event) => {
+    // event parameter is the event that triggers the call to this function
+    // preventDefault() prevents the default action of submitting the form, which normally would cause the page to reload
+    event.preventDefault()
+    // event target is the form html element that is defined in the component
+    console.log('button clicked', event.target)
+  }
+
+  return (
+    <div>
+      <h1>Notes</h1>
+      <ul>
+        {notes.map(note => 
+          <Note key={note.id} note={note} />
+        )}
+      </ul>
+      <form onSubmit={addNote}>
+        <input />
+        <button type="submit">save</button>
+      </form>   
+    </div>
+  )
+} 
+```
+
+- Controlled components
+  - this is where you assign a piece of component's state as the value attribute of the input element and thereby have the component control the behavior of the input element
+    - requires setting `onChange` event handler that is invoked every time a change occurs in the input element
+
+```js
+const App = (props) => {
+  const [notes, setNotes] = useState(props.notes)
+  const [newNote, setNewNote] = useState('a new note...') 
+
+  const addNote = (event) => {
+  event.preventDefault()
+  const noteObject = {
+    content: newNote,
+    date: new Date().toISOString(),
+    important: Math.random() < 0.5,
+    id: notes.length + 1,
+  }
+
+  // remember, the concat returns a new array and does not mutate the original array
+  setNotes(notes.concat(noteObject))
+  setNewNote('')
+}
+
+  const handleNoteChange = (event) => {
+    console.log(event.target.value)
+    setNewNote(event.target.value)
+  }
+
+  return (
+    <div>
+      <h1>Notes</h1>
+      <ul>
+        {notes.map(note => 
+          <Note key={note.id} note={note} />
+        )}
+      </ul>
+      <form onSubmit={addNote}>
+        <input value={newNote} onChange={handleNoteChange}/>
+        <button type="submit">save</button>
+      </form>   
+    </div>
+  )
+}
+
+```
+
+- Filtering displayed elements
+
+```js
+const App = (props) => {
+  const [notes, setNotes] = useState(props.notes)
+  const [newNote, setNewNote] = useState('a new note...') 
+  const [showAll, setShowAll] = useState(true)
+
+  const notesToShow = showAll ? notes
+    : notes.filter(note => note.important)
+
+  const addNote = (event) => {
+  event.preventDefault()
+  const noteObject = {
+    content: newNote,
+    date: new Date().toISOString(),
+    important: Math.random() < 0.5,
+    id: notes.length + 1,
+  }
+
+  // remember, the concat returns a new array and does not mutate the original array
+  setNotes(notes.concat(noteObject))
+  setNewNote('')
+}
+
+  const handleNoteChange = (event) => {
+    console.log(event.target.value)
+    setNewNote(event.target.value)
+  }
+
+  return (
+    <div>
+      <h1>Notes</h1>
+      <div>
+        <button onClick={() => setShowAll(!showAll)}>
+          show {showAll ? 'important' : 'all' }
+        </button>
+      </div>
+      <ul>
+        {notes.map(note => 
+          <Note key={note.id} note={note} />
+        )}
+        {notesToShow.map(note =>
+          <Note key={note.id} note={note} />
+        )}
+      </ul>
+      <form onSubmit={addNote}>
+        <input value={newNote} onChange={handleNoteChange}/>
+        <button type="submit">save</button>
+      </form>   
+    </div>
+  )
+}
+
+```
