@@ -305,3 +305,152 @@ export default App
 
 - need to prefix .env variables with `REACT_APP_` in order for it to work
 - Need to account for promise resolve time...display some default HTML while promise is not ready, to prevent errors
+
+## D: Altering data in server
+
+- Resources: the data objects that are the subject to REST api
+- Make HTTP POST request to create new resource
+
+```js
+// adding notes to server
+addNote = event => {
+  event.preventDefault()
+  // id is omitted because its better to let backend generate IDs
+  const noteObject = {
+    content: newNote,
+    date: new Date(),
+    important: Math.random() < 0.5,
+  }
+
+  axios
+    .post('http://localhost:3001/notes', noteObject)
+    .then(response => {
+      // the response is sent back from the server after POST request is sent
+      // The newly created resource is stored in the `data` property of the response object
+      console.log(response)
+      // remember, concat does not mutate date...it returns new data
+      setNotes(notes.concat(response.data))
+      setNewNote('')
+    })
+}
+
+```
+
+- PUT can be used to modify existing data (by replacing it entirely)
+
+```js
+const toggleImportanceOf = id => {
+  const url = `http://localhost:3001/notes/${id}`
+  const note = notes.find(n => n.id === id)
+  // creates copy of note except for the important property, which is modified accordingly 
+  const changedNote = { ...note, important: !note.important }
+
+  axios.put(url, changedNote).then(response => {
+    // the map checks for the specific note with id and replaces it with the result from the PUT request; all the other notes are just copied back as is
+    setNotes(notes.map(note => note.id !== id ? note : response.data))
+  })
+}
+```
+
+- REST operations as its own module
+
+```js
+import axios from 'axios'
+const baseUrl = 'http://localhost:3001/notes'
+
+const getAll = () => {
+  return axios.get(baseUrl)
+}
+
+const create = newObject => {
+  return axios.post(baseUrl, newObject)
+}
+
+const update = (id, newObject) => {
+  return axios.put(`${baseUrl}/${id}`, newObject)
+}
+
+export default { 
+  getAll: getAll, 
+  create: create, 
+  update: update 
+}
+
+// better version
+import axios from 'axios'
+const baseUrl = 'http://localhost:3001/notes'
+
+const getAll = () => {
+  const request = axios.get(baseUrl)
+  return request.then(response => response.data)
+}
+
+const create = newObject => {
+  const request = axios.post(baseUrl, newObject)
+  return request.then(response => response.data)
+}
+
+const update = (id, newObject) => {
+  const request = axios.put(`${baseUrl}/${id}`, newObject)
+  return request.then(response => response.data)
+}
+
+export default { 
+  getAll: getAll, 
+  create: create, 
+  update: update 
+}
+
+```
+
+- Using REST service methods
+
+```js
+const App = () => {
+  // ...
+
+  useEffect(() => {
+    noteService
+      .getAll()
+      .then(initialNotes => {
+        setNotes(initialNotes)
+      })
+  }, [])
+
+  const toggleImportanceOf = id => {
+    const note = notes.find(n => n.id === id)
+    const changedNote = { ...note, important: !note.important }
+
+    noteService
+      .update(id, changedNote)
+      .then(returnedNote => {
+        setNotes(notes.map(note => note.id !== id ? note : returnedNote))
+      })
+      .catch(error => {
+        alert(
+          `the note '${note.content}' was already deleted from server`
+        )
+        setNotes(notes.filter(n => n.id !== id))
+      })
+  }
+
+  const addNote = (event) => {
+    event.preventDefault()
+    const noteObject = {
+      content: newNote,
+      date: new Date().toISOString(),
+      important: Math.random() > 0.5
+    }
+
+    noteService
+      .create(noteObject)
+      .then(returnedNote => {
+        setNotes(notes.concat(returnedNote))
+        setNewNote('')
+      })
+  }
+
+  // ...
+}
+
+```
