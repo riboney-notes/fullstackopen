@@ -302,3 +302,6 @@ const App = () => {
 
 export default App
 ```
+
+- need to prefix .env variables with `REACT_APP_` in order for it to work
+- Need to account for promise resolve time...display some default HTML while promise is not ready, to prevent errors
