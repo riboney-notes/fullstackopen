@@ -1,0 +1,10 @@
+POST http://localhost:3001/api/persons HTTP/1.1
+content-type: application/json
+
+{
+    "name": "fsfg",
+    "number": "123-123-1234"
+}
+
+###
+GET http://localhost:3001/api/persons
