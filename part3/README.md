@@ -165,3 +165,49 @@ const unknownEndpoint = (request, response) => {
 // place at end to catch requests made to non-existent routes and handle error
 app.use(unknownEndpoint)
 ```
+
+## B: Deploying app to internet
+
+- CORS (Cross-Origin Resourcec Sharing)
+  - mechanism that allows restriced resources on a webpage to be requested from another domain outside the domain from which the first resource was served....so cross-origin things like images, fonts, stylesheets, scripts, etc can be embedded but things like Ajax requests are forbidden by same-origin security policies
+    - origin consists of: protocal (http), port (if specified) and host
+    - javascript code of an app that runs in a browser (like react app) can only communicate with a server in the same origin
+- Allow requests from other origins by using the cors middleware
+  - `const cors = require('cors')`, this will allow react to make requests to API
+    
+- Getting app ready for heroku
+  - Install Heroku CLI
+  - Login to heroku: `heroku login`
+  - Navigate to project
+  - Change routes in react app to point to API URLs
+  - `npm install cors` in backend and
+  ```js
+  const cors = require('cors')
+
+  app.use(cors())
+  ```
+    - not setting CORs or setting proxy will result in react app not being able to retrieve data from API
+  - set port to `process.env.port`: `const PORT = process.env.PORT || 3001`
+  - frontend production build
+    - Create build folder in root of the react directory: `npm run build`
+    - copy the resulting minified code to the root of the backend directory
+    - Have express show static content by using `static` and pointing it to the build folder: `app.use(express.static('build'))`
+      - whenever express gets a GET request, it will first check if the build directory contains a file corresponding to the request's address and return it if it does, thereby showing the REACT app
+    - Update API base URL in react to remove the `localhost/3001` and change it to a relative url since both frontend and backend are at the same address 
+    - rebuild react and copy to root of backend again
+  - Add these deployment scripts to backend package.json:
+  ```json
+    "build:ui": "rm -rf build && cd ./client && npm run build --prod && cp -r build ../",
+    "deploy": "git push heroku main",
+    "deploy:full": "npm run build:ui && git add . && git commit -m 'builds and deploys app' && npm run deploy",    
+    "logs:prod": "heroku logs --tail"
+  ```
+  - Add proxy to react package.json to allow it to make API calls since we changed our baseURL: `,"proxy": "http://localhost:3001",`
+  - In project directory: `heroku create`
+  - Push app to heroku: `git push heroku main`
+  - Visit the website app is hosted on: `heroku open`
+  - see app logs: `heroku logs --tail`
+  - Define `Procfile`, which is a text file in the root directory of app and declare what command should be executed to start the app: `web: npm start`
+  - scale app to dyno (which is like a docker container): `heroku ps:scale web=1`
+  - to run app locally, for testing stuff: `heroku local`
+  - pushing local changes: first stage and commit, then `git push heroku main`
