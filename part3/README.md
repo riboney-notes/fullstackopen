@@ -174,40 +174,35 @@ app.use(unknownEndpoint)
     - javascript code of an app that runs in a browser (like react app) can only communicate with a server in the same origin
 - Allow requests from other origins by using the cors middleware
   - `const cors = require('cors')`, this will allow react to make requests to API
-    
-- Getting app ready for heroku
-  - Install Heroku CLI
-  - Login to heroku: `heroku login`
-  - Navigate to project
-  - Change routes in react app to point to API URLs
-  - `npm install cors` in backend and
-  ```js
-  const cors = require('cors')
+  - not needed if react and backend are at the same address (like in production)
 
-  app.use(cors())
-  ```
-    - not setting CORs or setting proxy will result in react app not being able to retrieve data from API
-  - set port to `process.env.port`: `const PORT = process.env.PORT || 3001`
-  - frontend production build
-    - Create build folder in root of the react directory: `npm run build`
-    - copy the resulting minified code to the root of the backend directory
-    - Have express show static content by using `static` and pointing it to the build folder: `app.use(express.static('build'))`
-      - whenever express gets a GET request, it will first check if the build directory contains a file corresponding to the request's address and return it if it does, thereby showing the REACT app
-    - Update API base URL in react to remove the `localhost/3001` and change it to a relative url since both frontend and backend are at the same address 
-    - rebuild react and copy to root of backend again
-  - Add these deployment scripts to backend package.json:
+### Getting app ready for deployment
+- set port to `process.env.port`: `const PORT = process.env.PORT || 3001`
+- Add these deployment scripts to backend package.json:
   ```json
     "build:ui": "rm -rf build && cd ./client && npm run build --prod && cp -r build ../",
     "deploy": "git push heroku main",
     "deploy:full": "npm run build:ui && git add . && git commit -m 'builds and deploys app' && npm run deploy",    
     "logs:prod": "heroku logs --tail"
   ```
-  - Add proxy to react package.json to allow it to make API calls since we changed our baseURL: `,"proxy": "http://localhost:3001",`
-  - In project directory: `heroku create`
-  - Push app to heroku: `git push heroku main`
-  - Visit the website app is hosted on: `heroku open`
-  - see app logs: `heroku logs --tail`
-  - Define `Procfile`, which is a text file in the root directory of app and declare what command should be executed to start the app: `web: npm start`
-  - scale app to dyno (which is like a docker container): `heroku ps:scale web=1`
-  - to run app locally, for testing stuff: `heroku local`
-  - pushing local changes: first stage and commit, then `git push heroku main`
+  - `npm run build`: this script executed in react app will generate `build` folder for serving react app in production
+    - it must be copied to the root of the backend directory, which is done by `build:ui` script
+    - app must be build after any changes
+    - Make sure `build/` is not `.gitignore`-ed!
+- Enable express to serve static build files from react `app.use(express.static('build'))`
+  - Express will now check `build` directory for static files matching the request address, thereby serving React app code
+- Update urls in react relative urls (since both frontend and backend are at the same address now)
+  - remember to rebuild app
+- Add proxy to react package.json to allow it to make API calls to backend in development since the URLS are point to relative addresses and not the correct ports: `,"proxy": "http://localhost:3001",` 
+
+### Heroku setup & some heroku commands
+- Install Heroku CLI
+- Login to heroku: `heroku login`
+- In project directory: `heroku create`
+- Push app to heroku: `git push heroku main`
+- Visit the website app is hosted on: `heroku open`
+- see app logs: `heroku logs --tail`
+- Define `Procfile`, which is a text file in the root directory of app and declare what command should be executed to start the app: `web: npm start`
+- scale app to dyno (which is like a docker container): `heroku ps:scale web=1`
+- to run app locally, for testing stuff: `heroku local`
+- pushing local changes: first stage and commit, then `git push heroku main`
