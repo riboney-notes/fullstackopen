@@ -1,5 +1,7 @@
 # Part 3: Programming a server with NodeJS and Express
 
+*[Link](https://github.com/riboney/fso-phonebook) to the repo for the phonebook project from part 3*
+
 ## A: Node.js and Express
 
 - Javascript code is transpiled for browsers since they don't yet support the newest features of JS
