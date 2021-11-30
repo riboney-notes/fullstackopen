@@ -206,3 +206,278 @@ app.use(unknownEndpoint)
 - scale app to dyno (which is like a docker container): `heroku ps:scale web=1`
 - to run app locally, for testing stuff: `heroku local`
 - pushing local changes: first stage and commit, then `git push heroku main`
+
+## C: Saving data to mongodb
+
+- Mongoose sample code
+
+```js
+const mongoose = require('mongoose')
+
+const password = process.env.password // read from the env file
+
+const url =
+  `mongodb+srv://fullstack:${password}@cluster0-ostce.mongodb.net/test?retryWrites=true`
+
+mongoose.connect(url)
+
+// Schemas are not a requirement for mongodb...
+// you can store documents with completely different fields in the same collection
+const noteSchema = new mongoose.Schema({
+  content: String,
+  date: Date,
+  important: Boolean,
+})
+
+// this is the model definition
+// 'Note' parameter is the singular name of the model
+//   the (plural) collection name is derived from this automatically
+const Note = mongoose.model('Note', noteSchema)
+
+// creating a new note object from the Note model
+const note = new Note({
+  content: 'HTML is Easy',
+  date: new Date(),
+  important: true,
+})
+
+// querying notes
+Note.find({}).then(result => {
+  result.forEach(note => {
+    console.log(note)
+  })
+  mongoose.connection.close()
+})
+
+note.save().then(result => {
+  console.log('note saved!')
+  // needed or else the program will never finish its execution
+  mongoose.connection.close()
+})
+
+```
+
+- Mongoose Model create vs insertmany
+
+```
+The biggest difference is that insertMany() ends up as one atomic insertMany() command that Mongoose sends to the MongoDB server, but create() ends up as a bunch of separate insertOne() calls. While this means insertMany() is usually faster, it also means insertMany() is more susceptible to slow trains. Because of this, we recommend using create() instead of insertMany(), unless you're willing to risk slowing down other operations to make your bulk insert fast.
+
+source: https://masteringjs.io/tutorials/mongoose/create
+```
+
+- In order to modify mongoose schema to return objects that the application can work with:
+  - Convert mongoose document object into JSON: `model.toJSON()`
+    - does not include virtuals by default, so must have `{ virtuals: true }` pass into it
+  - set virtuals for 'id' so you can work with a String id instead of dealing with the default ObjectID type of `_id`
+
+```js
+const opts = { toJSON: {virtuals:true}}
+const notesSchema = mongoose.Schema({...}, opts)
+noteSchema.virtual('id').get(() => this._id.toString())
+noteSchema.set('toJSON', {
+  // executes whenever toJSON() is called
+  transform: (document, returnedObject) => {
+    // removes from the result of toJSON()
+    delete returnedObject.__v
+  }
+})
+const Note = mongoose.model('Note', noteSchema)
+const note = new Note({...})
+note.toJSON().id // returns _id as string
+
+
+// res.json() will now invoke the toJSON() method defined here in the model
+
+app.get('/api/notes', (request, response) => {
+  Note.find({}).then(notes => {
+    // toJSON() is automatically invoked here
+    response.json(notes)
+  })
+})
+```
+- Calling `next()` in route handler function allows you to handle over control, to the next handler or middleware
+
+```js
+app.get('/api/notes/:id', (request, response, next) => {
+  Note.findById(request.params.id)
+    .then(note => {
+      if (note) {
+        response.json(note)
+      } else {
+        response.status(404).end()
+      }
+    })
+    .catch(error => next(error))
+})
+```
+
+- calling `next(err)` with parameter forwards control and the error parameter to the error middle ware
+
+```js
+const errorHandler = (error, request, response, next) => {
+  console.error(error.message)
+
+  if (error.name === 'CastError') {
+    return response.status(400).send({ error: 'malformatted id' })
+  } 
+
+  // default express error handler
+  next(error)
+}
+
+// this has to be the last loaded middleware.
+app.use(errorHandler)
+```
+
+- Some error handler middleware [source](https://scoutapm.com/blog/express-error-handling)
+
+```js
+const errorLogger = (err, req, res, next) => {
+  console.error('\x1b[31m', err) // adding some color to our logs
+  next(err) // calling next middleware
+}
+
+const errorResponder = (err, req, res, next) => {
+  res.header("Content-Type", 'application/json')
+  res.status(err.statusCode).send(JSON.stringify(err, null, 4)) // pretty print
+}
+const invalidPathHandler = (req, res, next) => {
+  res.redirect('/error')
+}
+
+module.exports = { errorLogger, errorResponder, invalidPathHandler }
+
+//....
+
+app.use(errorLogger)
+app.use(errorResponder)
+app.use(invalidPathHandler)
+```
+
+- Delete with `findByIDandDelete()`
+
+```js
+app.delete('/api/notes/:id', (request, response, next) => {
+  Note.findByIdAndRemove(request.params.id)
+    .then(result => {
+      response.status(204).end()
+    })
+    .catch(error => next(error))
+})
+```
+
+- Update with `findByIDandUpdate()`
+
+```js
+app.put('/api/notes/:id', (request, response, next) => {
+  const body = request.body
+
+  const note = {
+    content: body.content,
+    important: body.important,
+  }
+
+  // note must be a javascript object
+  //   new Note() model object won't work
+  // {new:true} returns a new modified object instead of the original object
+  Note.findByIdAndUpdate(request.params.id, note, { new: true })
+    .then(updatedNote => {
+      response.json(updatedNote)
+    })
+    .catch(error => next(error))
+})
+```
+
+## D: Validation and ESLint
+
+- You can validate database inserts with the mongoose validation feature
+  - throws exception with `error.name = 'ValidationError'` if inserts violates any validation rules set in the schema
+
+```js
+// `required, minLength` are some built in validation rules mongoose provides
+const noteSchema = new mongoose.Schema({
+  content: {
+    type: String,
+    minLength: 5,
+    required: true
+  },
+  date: { 
+    type: Date,
+    required: true
+  },
+  important: Boolean
+})
+
+// catching error from invalid data
+app.post('/api/notes', (request, response, next) => {
+  const body = request.body
+
+  const note = new Note({
+    content: body.content,
+    important: body.important || false,
+    date: new Date(),
+  })
+
+  note.save()
+    .then(savedNote => {
+      response.json(savedNote.toJSON())
+    })
+    .catch(error => next(error))
+})
+
+// handling the error
+const errorHandler = (error, request, response, next) => {
+  console.error(error.message)
+
+  if (error.name === 'CastError') {
+    return response.status(400).send({ error: 'malformatted id' })
+  } else if (error.name === 'ValidationError') {
+    return response.status(400).json({ error: error.message })
+  }
+
+  next(error)
+}
+
+```
+
+- Promise chaining 
+
+```js
+app.post('/api/notes', (request, response, next) => {
+  // ...
+
+  note
+    .save()
+    .then(savedNote => {
+      return savedNote.toJSON()
+    })
+    .then(savedAndFormattedNote => {
+      response.json(savedAndFormattedNote)
+    }) 
+    .catch(error => next(error)) 
+})
+
+// more compact
+app.post('/api/notes', (request, response, next) => {
+  // ...
+
+  note
+    .save()
+    .then(savedNote => savedNote.toJSON())
+    .then(savedAndFormattedNote => {
+      response.json(savedAndFormattedNote)
+    }) 
+    .catch(error => next(error)) 
+})
+```
+
+- Setting up env variables in production
+  - dotenv doesn't work in production (because you dont push .env variables to github), so set env variables with `$ heroku config:set MONGODB_URI=<secret here>`
+
+- Compile statically type languages (like java) has the IDE point out errors in the code; for javascript, this can be done with ESLint which does static analysis
+  - `npm install eslint --save-dev`
+  - int default config: `node_modules/.bin/eslint --init`; config is in `.eslintrc.js` file
+  - inspect and validate indiviual file: `node_modules/.bin/eslint <filename>`
+  - npm script for linting entire app `lint: "eslint ."`
+    - to ignore files for linting (like `./build`), create `.eslintignore` and add ignored files there
+  - for vscode, install `eslint-plug` extrension to have the linter run continuously and view errors directly in the IDEnp
