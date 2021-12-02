@@ -247,3 +247,58 @@ noteSchema.set('toJSON', {
 
 module.exports = mongoose.model('Note', noteSchema)
 ```
+
+- Adding test runner to app: `npm install --save-dev jest`
+  - package-json
+    - script: `"test": "jest --verbose"`
+    - configuration. add to the end of `package.json`: `"jest": {"testEnvironment":"node"}` OR use `jest.config.js`
+    - configure ESLint for jest: add to `.eslintrc.js`: `'env':{...'jest':true,}` 
+- Name test files with this patter: `<name>.test.js`
+
+```js
+const palindrome = require('../utils/for_testing').palindrome
+
+test('palindrome of a', () => {
+  const result = palindrome('a')
+
+  expect(result).toBe('a')
+})
+
+test('palindrome of react', () => {
+  const result = palindrome('react')
+
+  expect(result).toBe('tcaer')
+})
+
+test('palindrome of releveler', () => {
+  const result = palindrome('releveler')
+
+  expect(result).toBe('releveler')
+})
+```
+
+- Use `describe` block to group together related tests
+
+```js
+describe('total likes', () => {
+  const listWithOneBlog = [
+    {
+      _id: '5a422aa71b54a676234d17f8',
+      title: 'Go To Statement Considered Harmful',
+      author: 'Edsger W. Dijkstra',
+      url: 'http://www.u.arizona.edu/~rubinson/copyright_violations/Go_To_Considered_Harmful.html',
+      likes: 5,
+      __v: 0
+    }
+  ]
+
+  test('when list has only one blog, equals the likes of that', () => {
+    const result = listHelper.totalLikes(listWithOneBlog)
+    expect(result).toBe(5)
+  })
+})
+```
+
+- Can run a single test (or describe block) by specifying the name of the test to be run with the -t flag: `npm test -- -t 'when list has only one blog, equals the likes of that'`
+
+
