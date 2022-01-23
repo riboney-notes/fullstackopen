@@ -4,7 +4,7 @@
 
 * Popular file structure for nodejs backend
 
-```
+```bash
 ├── index.js
 ├── app.js
 ├── build
@@ -72,14 +72,16 @@ logger.info(`Server running on port ${config.PORT}`)
 ```
 
 * Controllers: event handlers of routes
-  * Router objects: 
-  ```
+  * Router objects:
+
+  ```bash  
   A router object is an isolated instance of middleware and routes. You can think of it as a “mini-application,” capable only of performing middleware and routing functions. Every Express application has a built-in app router.
 
   ------
 
   Router is middleware that can be used for defining related routes in a single place
   ```
+
 ```js
 const notesRouter = require('express').Router()
 const Note = require('../models/note')
@@ -248,12 +250,13 @@ noteSchema.set('toJSON', {
 module.exports = mongoose.model('Note', noteSchema)
 ```
 
-- Adding test runner to app: `npm install --save-dev jest`
-  - package-json
-    - script: `"test": "jest --verbose"`
-    - configuration. add to the end of `package.json`: `"jest": {"testEnvironment":"node"}` OR use `jest.config.js`
-    - configure ESLint for jest: add to `.eslintrc.js`: `'env':{...'jest':true,}` 
-- Name test files with this patter: `<name>.test.js`
+* Adding test runner to app: `npm install --save-dev jest`
+  * package-json
+    * script: `"test": "jest --verbose"`
+    * configuration. add to the end of `package.json`: `"jest": {"testEnvironment":"node"}` OR use `jest.config.js`
+    * configure ESLint for jest: add to `.eslintrc.js`: `'env':{...'jest':true,}`
+
+* Name test files with this patter: `<name>.test.js`
 
 ```js
 const palindrome = require('../utils/for_testing').palindrome
@@ -277,7 +280,7 @@ test('palindrome of releveler', () => {
 })
 ```
 
-- Use `describe` block to group together related tests
+* Use `describe` block to group together related tests
 
 ```js
 describe('total likes', () => {
@@ -299,6 +302,242 @@ describe('total likes', () => {
 })
 ```
 
-- Can run a single test (or describe block) by specifying the name of the test to be run with the -t flag: `npm test -- -t 'when list has only one blog, equals the likes of that'`
+* Can run a single test (or describe block) by specifying the name of the test to be run with the -t flag: `npm test -- -t 'when list has only one blog, equals the likes of that'`
 
+## B: Testing the backend
 
+* Integration testing: Where multiple components of the system are tested together as a group
+* It is common practice to define separate modes for development and 
+* You can set the `env` when running scripts to change to the appropriate one for the script
+  * For prod: Change `NODE_ENV` to `prod`, ex: `"start": "NODE_ENV=prod node index.js"`
+  * For dev: Change `NODE_ENV` to `dev`, ex: `"dev": "NODE_ENV=dev nodemon index.js"`
+  * For testing: Change `NODE_ENV` to test, ex: `"test": "NODE_ENV=test jest --verbose --runInBand"`
+    * In action:  `const MONGODB_URI = process.env.NODE_ENV === 'test' ? process.env.TEST_MONGODB_URI: process.env.MONGODB_URI`
+    * Modifying logger so that it does not print to console in test mode:
+
+    ```js
+    const info = (...params) => {
+    if (process.env.NODE_ENV !== 'test') { 
+        console.log(...params)
+      }
+    }
+
+    const error = (...params) => {
+      if (process.env.NODE_ENV !== 'test') { 
+        console.error(...params)
+      }
+    }
+
+    module.exports = {
+      info, error
+    }
+    ```
+
+* Better to use different database (in-memory or docker) for tests
+* Testing HTTP: [SuperTest](https://github.com/visionmedia/supertest)
+  * `npm install supertest --save-dev`
+  * Note, its ok if `port` is not defined since `supertest` will define its own
+
+```js
+const mongoose = require('mongoose')
+const supertest = require('supertest')
+const app = require('../app')
+
+const api = supertest(app)
+const Note = require('../models/note')
+const initialNotes = [
+  {
+    content: 'HTML is easy',
+    date: new Date(),
+    important: false,
+  },
+  {
+    content: 'Browser can execute only Javascript',
+    date: new Date(),
+    important: true,
+  },
+]
+beforeEach(async () => {
+  await Note.deleteMany({})
+  let noteObject = new Note(initialNotes[0])
+  await noteObject.save()
+  noteObject = new Note(initialNotes[1])
+  await noteObject.save()
+})
+
+test('notes are returned as json', async () => {
+  await api
+    .get('/api/notes')
+    .expect(200)
+    .expect('Content-Type', /application\/json/)
+})
+
+// test('there are two notes', async () => {
+//   const response = await api.get('/api/notes')
+
+//   expect(response.body).toHaveLength(2)
+// })
+
+// test('the first note is about HTTP methods', async () => {
+//   const response = await api.get('/api/notes')
+
+//   expect(response.body[0].content).toBe('HTML is easy')
+// })
+
+test('all notes are returned', async () => {
+  const response = await api.get('/api/notes')
+
+  expect(response.body).toHaveLength(initialNotes.length)
+})
+
+test('a specific note is within the returned notes', async () => {
+  const response = await api.get('/api/notes')
+
+  const contents = response.body.map(r => r.content)
+  expect(contents).toContain(
+    'Browser can execute only Javascript'
+  )
+})
+
+test('a valid note can be added', async () => {
+  const newNote = {
+    content: 'async/await simplifies making async calls',
+    important: true,
+  }
+
+  await api
+    .post('/api/notes')
+    .send(newNote)
+    .expect(200)
+    .expect('Content-Type', /application\/json/)
+
+  const response = await api.get('/api/notes')
+
+  const contents = response.body.map(r => r.content)
+
+  expect(response.body).toHaveLength(initialNotes.length + 1)
+  expect(contents).toContain(
+    'async/await simplifies making async calls'
+  )
+
+  test('note without content is not added', async () => {
+    const newNote = {
+      important: true
+    }
+
+    await api
+      .post('/api/notes')
+      .send(newNote)
+      .expect(400)
+
+    const response = await api.get('/api/notes')
+
+    expect(response.body).toHaveLength(initialNotes.length)
+  })
+})
+
+afterAll(() => {
+  mongoose.connection.close()
+})
+```
+
+* Solving timeout or async-running-in-background type warning messages:
+
+```js
+// create jest.config.js at root with the following:
+module.exports = {testEnvironment:  'node'}
+
+// if test takes longer than the default Jest timeout of 5000ms, then add third parameter to test function with the expected time:
+
+test('notes are returned as json', async () => {
+  await api
+    .get('/api/notes')
+    .expect(200)
+    .expect('Content-Type', /application\/json/)
+}, 100000)
+```
+
+* Running tests one by one (todo: look up whether Jest runs afterAll() to close db connection)
+
+```bash
+# running specific test suite
+npm test -- tests/note_api.test.js
+
+# running specific test with name
+npm test -- -t "a specific note is within the returned notes"
+
+npm test -- -t 'notes'
+
+```
+
+* Regression: software bug where a feature that has worked before stops working after future changes
+
+* Dealing with exceptions with async/await in routers:
+
+```js
+notesRouter.post('/', async (request, response, next) => {
+  const body = request.body
+
+  const note = new Note({
+    content: body.content,
+    important: body.important || false,
+    date: new Date(),
+  })
+  try { 
+    const savedNote = await note.save()
+    response.json(savedNote)
+  } catch(exception) {
+    next(exception)
+  }
+})
+```
+
+* `beforeEach` will not wait for async operations to finish that are defined not directly in scope (ex: async operations inside `forEach` loop will not be `await`ed)
+  * use `Promise.all` to address this
+
+  ```js
+
+  // before
+  beforeEach(async () => {
+    await Note.deleteMany({})
+    console.log('cleared')
+
+    helper.initialNotes.forEach(async (note) => {
+      let noteObject = new Note(note)
+      await noteObject.save()
+      console.log('saved')
+    })
+    console.log('done')
+  })
+
+  // after Promise.all
+  beforeEach(async () => {
+    await Note.deleteMany({})
+
+    const noteObjects = helper.initialNotes
+      .map(note => new Note(note))
+    const promiseArray = noteObjects.map(note => note.save())
+    await Promise.all(promiseArray)
+  })
+  ```
+
+  ```bash
+  # explanation:
+  The Promise.all method can be used for Transforming an array of Promises into a single promise that will be fulfilled once every promise in the array passed to it as a parameter is resolved. The last line of code await Promise.all (promiseArray) Waits that every promise for saving a note is finished, meaning that the database has been initialized.
+
+  The returned values ​​of each promise in the array can still be accessed when using the Promise.all method. If we wait for the Promises to be resolved with the await syntax const results = await Promise.all (promiseArray) , the operation will return an array that contains the resolved values ​​for each promise in the promiseArray , and they appear in the same order as the Promises in the array.
+
+  Promise.all executes the Promises it receives in parallel. If the Promises need to be executed in a particular order, this will be problematic. In situations like this, the operations can be executed inside of a for ... of block, that guarantees a specific execution order.
+
+  Ex:
+  beforeEach(async () => {
+    await Note.deleteMany({})
+
+    for (let note of helper.initialNotes) {
+      let noteObject = new Note(note)
+      await noteObject.save()
+    }
+  })
+
+ 
+  ```

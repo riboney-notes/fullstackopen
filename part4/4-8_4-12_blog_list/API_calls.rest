@@ -1,0 +1,11 @@
+POST http://localhost:8000/api/blogs HTTP/1.1
+content-type: application/json
+
+{
+    "title": "The Tale of Bilbo Baggins",
+    "name": "fsfg",
+    "likes": "123"
+}
+
+###
+GET http://localhost:8000/api/blogs
