@@ -1,21 +1,19 @@
 const blogsRouter = require('express').Router()
 const Blog = require('../models/blog')
 
-blogsRouter.get('/', (req, res) => {
-    Blog.find({})
-        .then(blogs => res.status(200).json(blogs))
+blogsRouter.get('/', async (req, res) => {
+    const blogs = await Blog.find({})
+
+    res.status(200).json(blogs)
 })
 
-blogsRouter.get('/:id', (req, res, next) => {
-    Blog.findById(req.params.id)
-        .then(blog => {
-            if(blog) res.status(200).json(blog)
-            else res.status(404).end()
-        })
-        .catch(err => next(err))
+blogsRouter.get('/:id', async (req, res, next) => {
+    const blog = await Blog.findById(req.params.id);
+    if(blog) res.status(200).json(blog)
+    else res.status(404).end()  
 })
 
-blogsRouter.post('/', (req, res, next) => {
+blogsRouter.post('/', async (req, res, next) => {
     const blog = new Blog({
         title: req.body.title,
         author: req.body.author,
@@ -23,28 +21,24 @@ blogsRouter.post('/', (req, res, next) => {
         likes: req.body.likes,
     })
 
-    blog.save()
-        .then(rs => res.status(200).json(rs))
-        .catch(err => next(err))
+    const savedBlog = await blog.save()
+    res.status(200).json(savedBlog)
 })
 
-blogsRouter.delete('/:id', (req, res, next) => {
-    Blog.findByIdAndRemove(request.params.id)
-        .then(() => res.status(204).end())
-        .catch(err => next(err))
+blogsRouter.delete('/:id', async  (req, res, next) => {
+    await Blog.findByIdAndRemove(request.params.id)
+    res.status(204).end();
 })
 
-blogsRouter.put('/:id', (req, res, next) => {
+blogsRouter.put('/:id', async (req, res, next) => {
     const blog = new Blog({
         title: req.body.title,
         author: req.body.author,
         url: req.body.url,
         likes: req.body.likes,
     })
-
-    Blog.findByIdAndUpdate(req.params.id, blog, {new:true})
-        .then(rs => res.status(200).json(rs))
-        .catch(err => next(err))
+    
+    res.status(200).json(newBlog)
 })
 
 module.exports = blogsRouter
