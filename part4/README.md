@@ -541,3 +541,315 @@ notesRouter.post('/', async (request, response, next) => {
 
  
   ```
+
+## Part C: User Administration
+
+* Creating mongoose schema for user and having it reference another collection by its id:
+
+```js
+const mongoose = require('mongoose')
+const uniqueValidator = require('mongoose-unique-validator')
+
+const userSchema = new mongoose.Schema({
+  username: {
+    type: String,
+    unique: true
+  },
+  name: String,
+  passwordHash: String,
+  notes: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Note'
+    }
+  ],
+})
+
+userSchema.plugin(uniqueValidator)
+
+userSchema.set('toJSON', {
+  transform: (document, returnedObject) => {
+    returnedObject.id = returnedObject._id.toString()
+    delete returnedObject._id
+    delete returnedObject.__v
+    // the passwordHash should not be revealed
+    delete returnedObject.passwordHash
+  }
+})
+
+const User = mongoose.model('User', userSchema)
+
+module.exports = User
+```
+
+* Defining router for users:
+
+```js
+const usersRouter = require('./controllers/users')
+
+// ...
+
+app.use('/api/users', usersRouter)
+```
+
+* POST method for user router:
+
+```js
+const bcrypt = require('bcrypt')
+const usersRouter = require('express').Router()
+const User = require('../models/user')
+
+usersRouter.post('/', async (request, response) => {
+  const body = request.body
+
+  const saltRounds = 10
+  const passwordHash = await bcrypt.hash(body.password, saltRounds)
+
+  const user = new User({
+    username: body.username,
+    name: body.name,
+    passwordHash,
+  })
+
+  const savedUser = await user.save()
+
+  response.json(savedUser)
+})
+
+module.exports = usersRouter
+```
+
+* Some API tests for User
+
+```js
+const bcrypt = require('bcrypt')
+const User = require('../models/user')
+
+//...
+
+describe('when there is initially one user in db', () => {
+  beforeEach(async () => {
+    await User.deleteMany({})
+
+    const passwordHash = await bcrypt.hash('sekret', 10)
+    const user = new User({ username: 'root', passwordHash })
+
+    await user.save()
+  })
+
+  test('creation succeeds with a fresh username', async () => {
+    const usersAtStart = await helper.usersInDb()
+
+    const newUser = {
+      username: 'mluukkai',
+      name: 'Matti Luukkainen',
+      password: 'salainen',
+    }
+
+    await api
+      .post('/api/users')
+      .send(newUser)
+      .expect(200)
+      .expect('Content-Type', /application\/json/)
+
+    const usersAtEnd = await helper.usersInDb()
+    expect(usersAtEnd).toHaveLength(usersAtStart.length + 1)
+
+    const usernames = usersAtEnd.map(u => u.username)
+    expect(usernames).toContain(newUser.username)
+  })
+
+  test('creation fails with proper statuscode and message if username already taken', async () => {
+    const usersAtStart = await helper.usersInDb()
+
+    const newUser = {
+      username: 'root',
+      name: 'Superuser',
+      password: 'salainen',
+    }
+
+    const result = await api
+      .post('/api/users')
+      .send(newUser)
+      .expect(400)
+      .expect('Content-Type', /application\/json/)
+
+    expect(result.body.error).toContain('`username` to be unique')
+
+    const usersAtEnd = await helper.usersInDb()
+    expect(usersAtEnd).toHaveLength(usersAtStart.length)
+  })
+})
+
+// helper function
+const User = require('../models/user')
+
+// ...
+
+const usersInDb = async () => {
+  const users = await User.find({})
+  return users.map(u => u.toJSON())
+}
+
+module.exports = {
+  initialNotes,
+  nonExistingId,
+  notesInDb,
+  usersInDb,
+}
+```
+
+* Refactoring notes to include reference to user when making new note
+
+```js
+const User = require('../models/user')
+
+//...
+
+notesRouter.post('/', async (request, response, next) => {
+  const body = request.body
+
+  const user = await User.findById(body.userId)
+
+  const note = new Note({
+    content: body.content,
+    important: body.important === undefined ? false : body.important,
+    date: new Date(),
+    user: user._id
+  })
+
+  const savedNote = await note.save()
+  user.notes = user.notes.concat(savedNote._id)
+  await user.save()
+  
+  response.json(savedNote)
+})
+```
+
+* Using mongoose `populate` to include not just the IDs of the referenced collection items, but the items themselves
+
+```js
+usersRouter.get('/', async (request, response) => {
+  const users = await User
+    .find({}).populate('notes', { content: 1, date: 1 })
+
+  response.json(users)
+});
+```
+
+## Part D: Token Authentication
+
+* Creating router for logins
+
+```js
+const jwt = require('jsonwebtoken')
+const bcrypt = require('bcrypt')
+const loginRouter = require('express').Router()
+const User = require('../models/user')
+
+loginRouter.post('/', async (request, response) => {
+  const body = request.body
+
+  const user = await User.findOne({ username: body.username })
+  const passwordCorrect = user === null
+    ? false
+    : await bcrypt.compare(body.password, user.passwordHash)
+
+  if (!(user && passwordCorrect)) {
+    return response.status(401).json({
+      error: 'invalid username or password'
+    })
+  }
+
+  const userForToken = {
+    username: user.username,
+    id: user._id,
+  }
+
+  // process.env.SECRET must be set (most likely in .env file)
+  //    it can be any string
+  const token = jwt.sign(userForToken, process.env.SECRET)
+
+  response
+    .status(200)
+    .send({ token, username: user.username, name: user.name })
+})
+
+module.exports = loginRouter
+```
+
+* Adding login router to express app
+
+```js
+const loginRouter = require('./controllers/login')
+
+//...
+
+app.use('/api/login', loginRouter)
+```
+
+* Refactoring POST router to allow creation of notes only if valid token is attached (ie user is logged in)
+
+```js
+const jwt = require('jsonwebtoken')
+
+// ...
+const getTokenFrom = request => {
+  const authorization = request.get('authorization')
+  if (authorization && authorization.toLowerCase().startsWith('bearer ')) {
+    return authorization.substring(7)
+  }
+  return null
+}
+
+notesRouter.post('/', async (request, response) => {
+  const body = request.body
+  const token = getTokenFrom(request)
+  const decodedToken = jwt.verify(token, process.env.SECRET)
+  if (!decodedToken.id) {
+    return response.status(401).json({ error: 'token missing or invalid' })
+  }
+  const user = await User.findById(decodedToken.id)
+
+  const note = new Note({
+    content: body.content,
+    important: body.important === undefined ? false : body.important,
+    date: new Date(),
+    user: user._id
+  })
+
+  const savedNote = await note.save()
+  user.notes = user.notes.concat(savedNote._id)
+  await user.save()
+
+  response.json(savedNote)
+})
+```
+
+* refactoring error handling middleware to account for invalid JWT tokens
+
+```js
+const unknownEndpoint = (request, response) => {
+  response.status(404).send({ error: 'unknown endpoint' })
+}
+
+const errorHandler = (error, request, response, next) => {
+  if (error.name === 'CastError') {
+    return response.status(400).send({
+      error: 'malformatted id'
+    })
+  } else if (error.name === 'ValidationError') {
+    return response.status(400).json({
+      error: error.message 
+    })
+  } else if (error.name === 'JsonWebTokenError') {
+    return response.status(401).json({
+      error: 'invalid token'
+    })
+  }
+
+  logger.error(error.message)
+
+  next(error)
+}
+```
