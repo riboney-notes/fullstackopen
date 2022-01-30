@@ -16,12 +16,13 @@ const getAll = async () => {
     const res = await axios.get(baseURL, config)
     return res.data
   } catch(err){
-    console.log(err.msg)
+    console.log('error message: ', err.msg)
+    console.log(err)
     return null
   }
 }
 
-const createBlog = async request => {
+const create = async request => {
   const config = {
     headers: {Authorization: token}
   }
@@ -30,4 +31,4 @@ const createBlog = async request => {
   return res.data
 }
 
-export { getAll, createBlog, setToken }
+export { getAll, create, setToken }

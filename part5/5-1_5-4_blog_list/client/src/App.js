@@ -18,9 +18,10 @@ const App = () => {
   const [url, setURL] = useState('')
 
   const resetNotification = () => {
+    console.log('Notification is resetted!')
     setTimeout(() => {
       setMsg('')
-    }, 5000);
+    }, 3000);
   }
 
   useEffect(() => {
@@ -34,6 +35,8 @@ const App = () => {
 
 
 useEffect(resetNotification, [msg])
+
+useEffect(() => console.log('Msg: ', msg), [msg])
 
 useEffect( () => {
   const loggedUserJSON = window.localStorage.getItem('loggedBlogAppUser')
@@ -72,7 +75,10 @@ useEffect( () => {
           url={url}
           setMsg={setMsg}
         />
-        <Blogs blogs={blogs} />
+        {!blogs || blogs.length === 0 
+          ? <div>No blogs present</div>
+          : <Blogs blogs={blogs}/>
+        }
       </div>
     )
   }
@@ -81,7 +87,7 @@ useEffect( () => {
     <div>
       <h2>Blogs</h2>
       <br/>
-      <Notification msg={msg} />
+      {msg === '' ? null: <Notification msg={msg}/>}
       {user === null ? loginForm(): blogForm()}
     </div>
   )

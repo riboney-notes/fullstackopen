@@ -1,5 +1,5 @@
 import React from 'react'
-import {createBlog} from '../services/blogs'
+import * as blogService from '../services/blogs'
 
 const BlogForm = ({
     setTitle,
@@ -30,16 +30,13 @@ const BlogForm = ({
         console.log('URL:', url)
 
         try{
-            const blog = await createBlog({title, author, url})
-            setMsg('Blog successfully created!')
+            const blog = await blogService.create({title, author, url})
+            setMsg(`a new blog '${blog.title}' by ${blog.author} added`)
             setTitle('')
             setAuthor('')
             setURL('')
-            console.log('The created blog:', blog)
-            setMsg(`a new blog '${blog.title}' by ${blog.author} added`)
         } catch (err){
-            console.log('Error creating blog')
-            setMsg(err.message)
+            setMsg(`Error: ${err.message}`)
         }
     }
 
